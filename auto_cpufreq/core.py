@@ -868,6 +868,7 @@ def set_cpu_turbo(enable: bool):
     except Exception as e:
         print(f"Error setting CPU turbo: {e}")
 
+
 def set_nvidia_gpu_boost(enable=True):
     """Enable/disable NVIDIA GPU boost"""
     try:
@@ -878,6 +879,8 @@ def set_nvidia_gpu_boost(enable=True):
         print("Failed to set NVIDIA GPU boost. Make sure nvidia-smi is installed and run as root.")
     except FileNotFoundError:
         print("nvidia-smi not found. NVIDIA GPU boost not supported.")
+
+
 
 def set_amd_gpu_boost(enable=True):
     """Enable/disable AMD GPU boost via sysfs"""
@@ -892,6 +895,8 @@ def set_amd_gpu_boost(enable=True):
         print("Permission denied writing to GPU power control. Run as root.")
     except Exception as e:
         print(f"Error setting AMD GPU boost: {e}")
+
+
 
 def set_intel_gpu_boost(enable=True):
     """Enable/disable Intel GPU boost via sysfs"""
@@ -915,6 +920,8 @@ def set_intel_gpu_boost(enable=True):
     except Exception as e:
         print(f"Error setting Intel GPU boost: {e}")
 
+
+
 def detect_gpu_vendor():
     """Detect GPU vendor by parsing lspci output"""
     try:
@@ -928,6 +935,7 @@ def detect_gpu_vendor():
     except Exception:
         pass
     return None
+
 
 def apply_profile(profile_name: str):
     """Apply CPU and GPU profile settings"""
@@ -950,6 +958,8 @@ def apply_profile(profile_name: str):
         set_intel_gpu_boost(profile["gpu_boost"])
     else:
         print("GPU vendor not detected or unsupported for GPU boost control.")
+
+
 
 def main():
     if len(sys.argv) < 2:
@@ -1174,11 +1184,23 @@ def apply_profile(profile: str):
     else:
         print(f"[!] Unknown profile: {profile}")
         
+
+
+
+
+
+####
+      
+def battery_setup():
+    """
+    Placeholder for battery setup.
+    In VM or test mode, this does nothing.
+    """
+    print("[INFO] Skipping battery setup (not available in this environment).")
+      
         
         
-        
-        
- def log_power_event(event_type="unknown", source="system"):
+def log_power_event(event_type="unknown", source="system"):
     """
     Log power-related events (placeholder).
     """
@@ -1200,6 +1222,7 @@ def generate_dummy_load(duration=5):
     Generate CPU load for testing (placeholder).
     """
     import time
+    #race_down(2)
     print(f"Simulating CPU load for {duration} seconds...")
     time.sleep(duration)
     print("Load simulation complete.")
