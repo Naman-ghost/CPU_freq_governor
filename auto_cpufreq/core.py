@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 #
 # auto-cpufreq - core functionality
+
+import os
+import subprocess
+import sys
 import click, distro, os, platform, psutil, sys
 from importlib.metadata import metadata, PackageNotFoundError
 from math import isclose
@@ -783,22 +787,192 @@ def mon_performance():
             get_turbo()
     footer()
 
-def set_autofreq():
-    """
-    set cpufreq governor based if device is charging
-    """
-    print("\n" + "-" * 28 + " CPU frequency scaling " + "-" * 28 + "\n")
+#def set_autofreq():
+#    """
+ #   set cpufreq governor based if device is charging
+  #  """
+   # print("\n" + "-" * 28 + " CPU frequency scaling " + "-" * 28 + "\n")
+#
+ #   # determine which governor should be used
+  #  override = get_override()
+   # if override == "powersave": set_powersave()
+    #elif override == "performance": set_performance()
+    #elif charging():
+     #   print("Battery is: charging\n")
+      #  set_performance()
+   # else:
+    #    print("Battery is: discharging\n")
+     #   set_powersave()
 
-    # determine which governor should be used
-    override = get_override()
-    if override == "powersave": set_powersave()
-    elif override == "performance": set_performance()
-    elif charging():
-        print("Battery is: charging\n")
-        set_performance()
+###
+
+
+
+###
+
+PROFILES = {
+    "balanced": {
+        "governor": "ondemand",
+        "turbo": True,
+        "gpu_boost": True
+    },
+    "powersave": {
+        "governor": "powersave",
+        "turbo": False,
+        "gpu_boost": False
+    },
+    "performance": {
+        "governor": "performance",
+        "turbo": True,
+        "gpu_boost": True
+    },
+    "default": {
+        "governor": "ondemand",
+        "turbo": True,
+        "gpu_boost": True
+    }
+}
+
+
+def set_cpu_governor(governor: str):
+    """Set CPU scaling governor for all CPUs"""
+    cpu_dir = "/sys/devices/system/cpu"
+    cpus = [d for d in os.listdir(cpu_dir) if d.startswith("cpu") and d[3:].isdigit()]
+    for cpu in cpus:
+        gov_path = os.path.join(cpu_dir, cpu, "cpufreq", "scaling_governor")
+        try:
+            with open(gov_path, 'w') as f:
+                f.write(governor)
+            print(f"Set {cpu} governor to {governor}")
+        except FileNotFoundError:
+            print(f"Governor path not found for {cpu}, skipping.")
+        except PermissionError:
+            print(f"Permission denied setting governor for {cpu}. Run as root.")
+        except Exception as e:
+            print(f"Error setting governor for {cpu}: {e}")
+
+
+
+def set_cpu_turbo(enable: bool):
+    """Enable or disable CPU turbo boost"""
+    turbo_path = "/sys/devices/system/cpu/intel_pstate/no_turbo"
+    # For Intel systems, 0 means turbo enabled, 1 means disabled
+    try:
+        with open(turbo_path, 'w') as f:
+            f.write("0" if enable else "1")
+        print(f"CPU Turbo {'enabled' if enable else 'disabled'}")
+    except FileNotFoundError:
+        print("Turbo control not supported on this system.")
+    except PermissionError:
+        print("Permission denied setting turbo. Run as root.")
+    except Exception as e:
+        print(f"Error setting CPU turbo: {e}")
+
+def set_nvidia_gpu_boost(enable=True):
+    """Enable/disable NVIDIA GPU boost"""
+    try:
+        cmd = f"nvidia-smi --auto-boost-default={'ENABLED' if enable else 'DISABLED'}"
+        subprocess.run(cmd, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        print(f"NVIDIA GPU boost {'enabled' if enable else 'disabled'}")
+    except subprocess.CalledProcessError:
+        print("Failed to set NVIDIA GPU boost. Make sure nvidia-smi is installed and run as root.")
+    except FileNotFoundError:
+        print("nvidia-smi not found. NVIDIA GPU boost not supported.")
+
+def set_amd_gpu_boost(enable=True):
+    """Enable/disable AMD GPU boost via sysfs"""
+    power_path = "/sys/class/drm/card0/device/power_dpm_force_performance_level"
+    try:
+        with open(power_path, 'w') as f:
+            f.write("performance" if enable else "auto")
+        print(f"AMD GPU boost {'enabled' if enable else 'disabled'}")
+    except FileNotFoundError:
+        print("AMD GPU boost control file not found. Maybe not an AMD GPU or unsupported.")
+    except PermissionError:
+        print("Permission denied writing to GPU power control. Run as root.")
+    except Exception as e:
+        print(f"Error setting AMD GPU boost: {e}")
+
+def set_intel_gpu_boost(enable=True):
+    """Enable/disable Intel GPU boost via sysfs"""
+    boost_path = "/sys/class/drm/card0/device/gt_boost_freq_mhz"
+    max_freq_path = "/sys/class/drm/card0/device/gt_max_freq_mhz"
+    try:
+        if enable:
+            with open(max_freq_path, 'r') as f:
+                max_freq = f.read().strip()
+            with open(boost_path, 'w') as f:
+                f.write(max_freq)
+            print(f"Intel GPU boost enabled at {max_freq} MHz")
+        else:
+            with open(boost_path, 'w') as f:
+                f.write("0")
+            print("Intel GPU boost disabled")
+    except FileNotFoundError:
+        print("Intel GPU boost control not supported on this system.")
+    except PermissionError:
+        print("Permission denied. Run as root to set Intel GPU boost.")
+    except Exception as e:
+        print(f"Error setting Intel GPU boost: {e}")
+
+def detect_gpu_vendor():
+    """Detect GPU vendor by parsing lspci output"""
+    try:
+        lspci_output = subprocess.check_output("lspci -nnk | grep -i vga", shell=True).decode().lower()
+        if "nvidia" in lspci_output:
+            return "nvidia"
+        elif "amd" in lspci_output or "advanced micro devices" in lspci_output:
+            return "amd"
+        elif "intel" in lspci_output:
+            return "intel"
+    except Exception:
+        pass
+    return None
+
+def apply_profile(profile_name: str):
+    """Apply CPU and GPU profile settings"""
+    profile = PROFILES.get(profile_name)
+    if not profile:
+        print(f"Profile '{profile_name}' not found. Applying 'default' profile.")
+        profile = PROFILES["default"]
+
+    print(f"Applying profile: {profile_name}")
+
+    set_cpu_governor(profile["governor"])
+    set_cpu_turbo(profile["turbo"])
+
+    gpu_vendor = detect_gpu_vendor()
+    if gpu_vendor == "nvidia":
+        set_nvidia_gpu_boost(profile["gpu_boost"])
+    elif gpu_vendor == "amd":
+        set_amd_gpu_boost(profile["gpu_boost"])
+    elif gpu_vendor == "intel":
+        set_intel_gpu_boost(profile["gpu_boost"])
     else:
-        print("Battery is: discharging\n")
-        set_powersave()
+        print("GPU vendor not detected or unsupported for GPU boost control.")
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: python3 cpu_gpu_profiles.py <profile_name>")
+        print("Available profiles:", ", ".join(PROFILES.keys()))
+        sys.exit(1)
+
+    profile_name = sys.argv[1]
+    apply_profile(profile_name)
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+
+###
+
+
+
+
 
 def mon_autofreq():
     """
